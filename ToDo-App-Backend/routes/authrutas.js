@@ -1,160 +1,135 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const User = require('../models/usuario');
+const User = require('../models/User');
 
-// 🔥 LOG GLOBAL PARA CUALQUIER REQUEST
-router.use((req, res, next) => {
-  console.log('🔥🔥🔥 REQUEST RECIBIDO EN AUTH ROUTES 🔥🔥🔥');
-  console.log('Method:', req.method);
-  console.log('Path:', req.path);
-  console.log('Body:', JSON.stringify(req.body));
-  next();
-});
+// Generar JWT Token
+const generateToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN || '30d'
+  });
+};
 
-// Registro
+// POST /api/auth/register - Registrar nuevo usuario
 router.post('/register', async (req, res) => {
   try {
-    console.log('');
-    console.log('==========================================');
-    console.log('🚀 INICIO REGISTRO');
-    console.log('==========================================');
-    console.log('Body completo:', JSON.stringify(req.body, null, 2));
-    console.log('Username:', req.body.username);
-    console.log('Email:', req.body.email);
-    console.log('Password length:', req.body.password ? req.body.password.length : 0);
-    
-    const { username, email, password } = req.body;
+    const { name, email, password } = req.body;
 
-    // VALIDACIÓN SIMPLE
-    if (!req.body || Object.keys(req.body).length === 0) {
-      console.log('❌ req.body está vacío');
-      return res.status(400).json({ error: 'No se recibieron datos' });
-    }
-    if (!username || !email || !password) {
-      console.log('❌ Faltan campos requeridos');
-      return res.status(400).json({ error: 'Faltan campos requeridos' });
-    }
-
-    console.log('✅ Todos los campos presentes');
-    console.log('🔍 Buscando si email ya existe...');
-
-    // Validar que el usuario no exista
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      console.log('❌ Email ya registrado');
-      return res.status(400).json({ error: 'El email ya está registrado' });
-    }
-
-    console.log('✅ Email disponible');
-    console.log('💾 Creando usuario en base de datos...');
-
-    // Crear usuario
-    const user = new User({ username, email, password });
-    await user.save();
-
-    console.log('✅ Usuario guardado:', user.username);
-    console.log('🔐 Generando token JWT...');
-
-    // Generar token
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    console.log('✅ Token generado exitosamente');
-    console.log('📤 Enviando respuesta al cliente...');
-
-    const response = {
-      success: true,
-      message: 'Usuario registrado exitosamente',
-      token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email
-      }
-    };
-
-    console.log('Respuesta:', JSON.stringify(response, null, 2));
-    console.log('==========================================');
-    console.log('🎉 FIN REGISTRO EXITOSO');
-    console.log('==========================================');
-    console.log('');
-
-    res.status(201).json(response);
-
-  } catch (error) {
-    console.log('');
-    console.log('==========================================');
-    console.log('💥 ERROR EN REGISTRO');
-    console.log('==========================================');
-    console.error('Error completo:', error);
-    console.error('Mensaje:', error.message);
-    console.error('Stack:', error.stack);
-    console.log('==========================================');
-    console.log('');
-    
-    res.status(500).json({ 
-      error: 'Error al registrar usuario', 
-      details: error.message 
-    });
-  }
-});
-
-// Login
-router.post('/login', async (req, res) => {
-  try {
-    console.log('');
-    console.log('🔐 INTENTO DE LOGIN');
-    console.log('Body:', JSON.stringify(req.body));
-    
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      console.log('❌ Faltan credenciales');
+    // Validar campos
+    if (!name || !email || !password) {
       return res.status(400).json({ 
-        error: 'Email y contraseña son requeridos' 
+        error: 'Por favor proporciona nombre, email y contraseña' 
       });
     }
 
-    const user = await User.findOne({ email });
+    // Verificar si el usuario ya existe
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      return res.status(400).json({ 
+        error: 'El email ya está registrado' 
+      });
+    }
+
+    // Crear usuario
+    const user = await User.create({
+      name,
+      email,
+      password
+    });
+
+    // Generar token
+    const token = generateToken(user._id);
+
+    res.status(201).json({
+      success: true,
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email
+      }
+    });
+  } catch (error) {
+    console.error('Error al registrar usuario:', error);
+    res.status(500).json({ error: 'Error al registrar usuario' });
+  }
+});
+
+// POST /api/auth/login - Iniciar sesión
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Validar campos
+    if (!email || !password) {
+      return res.status(400).json({ 
+        error: 'Por favor proporciona email y contraseña' 
+      });
+    }
+
+    // Buscar usuario (incluir password para comparar)
+    const user = await User.findOne({ email }).select('+password');
+
     if (!user) {
-      console.log('❌ Usuario no encontrado');
-      return res.status(401).json({ error: 'Credenciales inválidas' });
+      return res.status(401).json({ 
+        error: 'Credenciales inválidas' 
+      });
     }
 
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      console.log('❌ Password incorrecto');
-      return res.status(401).json({ error: 'Credenciales inválidas' });
+    // Verificar contraseña
+    const isPasswordValid = await user.comparePassword(password);
+
+    if (!isPasswordValid) {
+      return res.status(401).json({ 
+        error: 'Credenciales inválidas' 
+      });
     }
 
-    console.log('✅ Login exitoso para:', user.username);
-
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    // Generar token
+    const token = generateToken(user._id);
 
     res.json({
       success: true,
       token,
       user: {
         id: user._id,
-        username: user.username,
+        name: user.name,
         email: user.email
       }
     });
-
   } catch (error) {
-    console.error('💥 ERROR LOGIN:', error.message);
-    res.status(500).json({ 
-      error: 'Error al iniciar sesión', 
-      details: error.message 
+    console.error('Error al iniciar sesión:', error);
+    res.status(500).json({ error: 'Error al iniciar sesión' });
+  }
+});
+
+// GET /api/auth/me - Obtener usuario autenticado
+router.get('/me', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({ error: 'No autorizado' });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id).select('-password');
+
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email
+      }
     });
+  } catch (error) {
+    console.error('Error al obtener usuario:', error);
+    res.status(401).json({ error: 'No autorizado' });
   }
 });
 
