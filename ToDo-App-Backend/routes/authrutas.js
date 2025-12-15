@@ -31,16 +31,9 @@ router.post('/register', async (req, res) => {
       console.log('❌ req.body está vacío');
       return res.status(400).json({ error: 'No se recibieron datos' });
     }
-
-    // Validación de campos
     if (!username || !email || !password) {
-      console.log('❌ FALTAN CAMPOS:');
-      console.log('   Username presente:', !!username);
-      console.log('   Email presente:', !!email);
-      console.log('   Password presente:', !!password);
-      return res.status(400).json({ 
-        error: 'Por favor proporciona nombre, email y contraseña'
-      });
+      console.log('❌ Faltan campos requeridos');
+      return res.status(400).json({ error: 'Faltan campos requeridos' });
     }
 
     console.log('✅ Todos los campos presentes');
