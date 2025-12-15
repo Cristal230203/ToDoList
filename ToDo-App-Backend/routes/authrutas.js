@@ -7,50 +7,46 @@ const User = require('../models/usuario');
 router.post('/register', async (req, res) => {
   try {
     console.log('=== DEBUG REGISTRO ===');
-    console.log('📦 Body completo:', JSON.stringify(req.body, null, 2));
-    console.log('📦 Content-Type:', req.headers['content-type']);
+    console.log('Username:', req.body.username);
+    console.log('Email:', req.body.email);
+    console.log('Password existe:', !!req.body.password);
     
     const { username, email, password } = req.body;
-    
-    console.log('📦 Username:', username);
-    console.log('📦 Email:', email);
-    console.log('📦 Password length:', password ? password.length : 0);
 
-    // Validación mejorada
-    if (!username || username.trim() === '' || 
-        !email || email.trim() === '' || 
-        !password || password.trim() === '') {
-      console.log('❌ VALIDACIÓN FALLIDA');
-      console.log('   - username válido:', !!username && username.trim() !== '');
-      console.log('   - email válido:', !!email && email.trim() !== '');
-      console.log('   - password válido:', !!password && password.trim() !== '');
-      
+    // VALIDACIÓN SIMPLE - Si falla aquí, hay un problema con req.body
+    if (!req.body || Object.keys(req.body).length === 0) {
+      console.log('❌ req.body está vacío o es null');
+      return res.status(400).json({ error: 'No se recibieron datos' });
+    }
+
+    // Validación de campos
+    if (!username || !email || !password) {
+      console.log('❌ Campos faltantes:', {
+        tieneUsername: !!username,
+        tieneEmail: !!email,
+        tienePassword: !!password
+      });
       return res.status(400).json({ 
         error: 'Por favor proporciona nombre, email y contraseña'
       });
     }
 
-    console.log('✅ Validación pasada, buscando usuario existente...');
+    console.log('✅ Validación pasada');
 
     // Validar que el usuario no exista
-    const existingUser = await User.findOne({ email: email.trim().toLowerCase() });
+    const existingUser = await User.findOne({ email });
     if (existingUser) {
-      console.log('❌ Email ya registrado');
+      console.log('❌ Email ya existe');
       return res.status(400).json({ error: 'El email ya está registrado' });
     }
 
-    console.log('✅ Email disponible, creando usuario...');
+    console.log('✅ Creando usuario...');
 
     // Crear usuario
-    const user = new User({ 
-      username: username.trim(), 
-      email: email.trim().toLowerCase(), 
-      password: password.trim()
-    });
-    
+    const user = new User({ username, email, password });
     await user.save();
 
-    console.log('✅ Usuario creado exitosamente:', user.username);
+    console.log('✅ Usuario creado:', user.username);
 
     // Generar token
     const token = jwt.sign(
@@ -58,8 +54,6 @@ router.post('/register', async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
-
-    console.log('✅ Token generado');
 
     res.status(201).json({ 
       success: true,
@@ -72,11 +66,9 @@ router.post('/register', async (req, res) => {
       }
     });
 
-    console.log('=== FIN DEBUG REGISTRO ===\n');
-
   } catch (error) {
-    console.error('❌ ERROR EN REGISTRO:', error);
-    console.error('❌ Stack:', error.stack);
+    console.error('❌ ERROR:', error.message);
+    console.error('Stack completo:', error.stack);
     res.status(500).json({ 
       error: 'Error al registrar usuario', 
       details: error.message 
@@ -88,37 +80,29 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     console.log('=== DEBUG LOGIN ===');
-    console.log('📦 Body:', JSON.stringify(req.body, null, 2));
+    console.log('Body recibido:', req.body);
     
     const { email, password } = req.body;
 
-    if (!email || email.trim() === '' || 
-        !password || password.trim() === '') {
-      console.log('❌ Validación login fallida');
+    if (!email || !password) {
       return res.status(400).json({ 
         error: 'Email y contraseña son requeridos' 
       });
     }
 
-    console.log('✅ Buscando usuario...');
-
     // Buscar usuario
-    const user = await User.findOne({ email: email.trim().toLowerCase() });
+    const user = await User.findOne({ email });
     if (!user) {
-      console.log('❌ Usuario no encontrado');
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
-
-    console.log('✅ Usuario encontrado, verificando password...');
 
     // Verificar password
-    const isMatch = await user.comparePassword(password.trim());
+    const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      console.log('❌ Password incorrecto');
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
-    console.log('✅ Login exitoso:', user.username);
+    console.log('✅ Login exitoso');
 
     // Generar token
     const token = jwt.sign(
@@ -137,10 +121,8 @@ router.post('/login', async (req, res) => {
       }
     });
 
-    console.log('=== FIN DEBUG LOGIN ===\n');
-
   } catch (error) {
-    console.error('❌ ERROR EN LOGIN:', error);
+    console.error('❌ ERROR LOGIN:', error.message);
     res.status(500).json({ 
       error: 'Error al iniciar sesión', 
       details: error.message 
