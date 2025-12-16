@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const User = require('../models/usuario');
 
 // Generar JWT Token
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
+const generateToken = (userId) => {
+  return jwt.sign({ userId }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '30d'
   });
 };
@@ -13,12 +13,12 @@ const generateToken = (id) => {
 // POST /api/auth/register - Registrar nuevo usuario
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { username, email, password } = req.body;
 
     // Validar campos
-    if (!name || !email || !password) {
+    if (!username || !email || !password) {
       return res.status(400).json({ 
-        error: 'Por favor proporciona nombre, email y contraseña' 
+        error: 'Por favor proporciona nombre de usuario, email y contraseña' 
       });
     }
 
@@ -32,7 +32,7 @@ router.post('/register', async (req, res) => {
 
     // Crear usuario
     const user = await User.create({
-      name,
+      username,
       email,
       password
     });
@@ -45,7 +45,7 @@ router.post('/register', async (req, res) => {
       token,
       user: {
         id: user._id,
-        name: user.name,
+        username: user.username,
         email: user.email
       }
     });
@@ -93,7 +93,7 @@ router.post('/login', async (req, res) => {
       token,
       user: {
         id: user._id,
-        name: user.name,
+        username: user.username,
         email: user.email
       }
     });
@@ -113,7 +113,8 @@ router.get('/me', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select('-password');
+    const userId = decoded.userId || decoded.id;
+    const user = await User.findById(userId).select('-password');
 
     if (!user) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
@@ -123,7 +124,7 @@ router.get('/me', async (req, res) => {
       success: true,
       user: {
         id: user._id,
-        name: user.name,
+        username: user.username,
         email: user.email
       }
     });

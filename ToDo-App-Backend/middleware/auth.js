@@ -1,18 +1,53 @@
 const jwt = require('jsonwebtoken');
+const User = require('../models/usuario');
 
 const auth = async (req, res, next) => {
   try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
+    // Obtener token del header
+    const token = req.headers.authorization?.split(' ')[1];
     
     if (!token) {
-      return res.status(401).json({ error: 'Acceso denegado. Token no proporcionado.' });
+      return res.status(401).json({ 
+        error: 'No autorizado - Token no proporcionado' 
+      });
     }
 
+    // Verificar token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.userId = decoded.userId;
+    
+    // Buscar usuario (compatible con ambas versiones)
+    const userId = decoded.userId || decoded.id;
+    const user = await User.findById(userId).select('-password');
+
+    if (!user) {
+      return res.status(401).json({ 
+        error: 'No autorizado - Usuario no encontrado' 
+      });
+    }
+
+    // Agregar usuario a la request
+    req.user = user;
+    req.userId = user._id;
+    
     next();
   } catch (error) {
-    res.status(401).json({ error: 'Token inválido' });
+    console.error('Error en autenticación:', error);
+    
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ 
+        error: 'No autorizado - Token inválido' 
+      });
+    }
+    
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ 
+        error: 'No autorizado - Token expirado' 
+      });
+    }
+    
+    res.status(500).json({ 
+      error: 'Error en la autenticación' 
+    });
   }
 };
 
